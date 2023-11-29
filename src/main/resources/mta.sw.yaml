@@ -7,7 +7,7 @@ version: "1.0"
 timeouts:
   workflowExecTimeout:
     duration: PT1H
-start: GetApplication
+start: GetApplications
 dataInputSchema:
   schema: specs/mta-input.json
   failOnValidationErrors: false
@@ -18,7 +18,7 @@ functions:
   - name: filterApplication
     type: expression
     operation: "{application: .applications|map(select(.repository.url == .repositoryURL))[0]}"
-  - name: getApplication
+  - name: getApplications
     operation: specs/mta.json#getApplications
   - name: createApplication
     operation: specs/mta.json#createApplication
@@ -30,12 +30,12 @@ functions:
     operation: specs/mta.json#getTaskgroup
 
 states:
-  - name: GetApplication
+  - name: GetApplications
     type: operation
     actionMode: sequential
     actions:
       - name: getApp
-        functionRef: getApplication
+        functionRef: getApplications
         actionDataFilter:
           toStateData: ".applications"
     stateDataFilter:
@@ -63,6 +63,8 @@ states:
             repository:
               url: ".repositoryURL"
               kind: git
+    stateDataFilter:
+      output: ". += { application: .application }"
     transition: CreateTaskgroup
   - name: CreateTaskgroup
     type: operation
@@ -98,7 +100,8 @@ states:
               sources: [ ]
               targets:
                 - cloud-readiness
-            
+    stateDataFilter:
+      output: ". += { taskgroup: .taskgroup }"
     transition: SubmitAnalysis
   - name: SubmitAnalysis
     type: operation
@@ -126,6 +129,8 @@ states:
             id: ".taskgroup.id"
         actionDataFilter:
           toStateData: ".taskgroup"
+    stateDataFilter:
+      output: ". += { taskgroup: .taskgroup }"
     transition: poll
   - actions:
       - functionRef:
@@ -138,19 +143,27 @@ states:
           before: PT2S
     name: poll
     type: operation
+    stateDataFilter:
+      output: ". += { taskgroup: .taskgroup }"
     transition: checkReportDone
   - name: checkReportDone
     type: switch
     dataConditions:
       - condition: (.taskgroup.state == "Ready" and .taskgroup.tasks[0].state == "Succeeded")
         transition: report
+      - condition: (.taskgroup.state == "Ready" and .taskgroup.tasks[0].state == "Failed")
+        transition: failed
     defaultCondition:
       transition: poll
   - name: report
     type: operation
     stateDataFilter:
-      output: '{result: .taskgroup.tasks[0]| .mtaURL + "/hub/applications" + "/" + (.application.id|tostring)
-      + "/bucket/" + .data.output}'
+      output: '{result: .taskgroup.tasks[0]| .mtaURL + "/hub/applications" + "/" + (.application.id|tostring) + "/bucket/" + .data.output}'
+    end: true
+  - name: failed
+    type: operation
+    stateDataFilter:
+      output: '{result: .taskgroup.tasks[0]| .mtaURL + "/hub/applications" + "/" + (.application.id|tostring) + "/bucket/" + .data.output}'
     end: true
 
 
