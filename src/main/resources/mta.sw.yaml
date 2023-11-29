@@ -7,7 +7,7 @@ version: "1.0"
 timeouts:
   workflowExecTimeout:
     duration: PT1H
-start: GetApplication
+start: GetApplications
 dataInputSchema:
   schema: specs/mta-input.json
   failOnValidationErrors: false
@@ -18,7 +18,7 @@ functions:
   - name: filterApplication
     type: expression
     operation: "{application: .applications|map(select(.repository.url == .repositoryURL))[0]}"
-  - name: getApplication
+  - name: getApplications
     operation: specs/mta.json#getApplications
   - name: createApplication
     operation: specs/mta.json#createApplication
@@ -30,12 +30,12 @@ functions:
     operation: specs/mta.json#getTaskgroup
 
 states:
-  - name: GetApplication
+  - name: GetApplications
     type: operation
     actionMode: sequential
     actions:
       - name: getApp
-        functionRef: getApplication
+        functionRef: getApplications
         actionDataFilter:
           toStateData: ".applications"
     stateDataFilter:
@@ -60,14 +60,17 @@ states:
             repository:
               url: ".repositoryURL"
               kind: git
+        actionDataFilter:
+          useResults: true
+          toStateData: .application
+    stateDataFilter:
+      output: ". += { application: .application }"
     transition: CreateTaskgroup
   - name: CreateTaskgroup
     type: operation
     actionMode: sequential
     actions:
       - name: createTaskgroup
-        actionDataFilter:
-          toStateData: ".taskgroup"
         functionRef:
           refName: createTaskgroup
           arguments:
@@ -86,6 +89,11 @@ states:
               - name: parodos.windup
                 application:
                   id: ".application.id"
+        actionDataFilter:
+          useResults: true
+          toStateData: .taskgroup
+    stateDataFilter:
+      output: ". += { taskgroup: .taskgroup }"
     transition: SubmitAnalysis
   - name: SubmitAnalysis
     type: operation
@@ -99,6 +107,8 @@ states:
           arguments:
             id: ".taskgroup.id"
             data: ".taskgroup.data"
+    stateDataFilter:
+      output: ". += { taskgroup: .taskgroup }"
     transition: GetAnalysis
   - name: GetAnalysis
     type: operation
@@ -111,6 +121,8 @@ states:
             id: ".taskgroup.id"
         actionDataFilter:
           toStateData: ".taskgroup"
+    stateDataFilter:
+      output: ". += { taskgroup: .taskgroup }"
     transition: poll
   - actions:
       - functionRef:
@@ -123,6 +135,8 @@ states:
           before: PT2S
     name: poll
     type: operation
+    stateDataFilter:
+      output: ". += { taskgroup: .taskgroup }"
     transition: checkReportDone
   - name: checkReportDone
     type: switch
@@ -134,8 +148,7 @@ states:
   - name: report
     type: operation
     stateDataFilter:
-      output: '{result: .taskgroup.tasks[0]| .mtaURL + "/hub/applications" + "/" + (.application.id|tostring)
-      + "/bucket/" + .data.output}'
+      output: '{result: .taskgroup.tasks[0]| .mtaURL + "/hub/applications" + "/" + (.application.id|tostring) + "/bucket/" + .data.output}'
     end: true
 
 
