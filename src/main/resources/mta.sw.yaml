@@ -63,9 +63,6 @@ states:
             repository:
               url: ".repositoryURL"
               kind: git
-        actionDataFilter:
-          useResults: true
-          toStateData: .application
     stateDataFilter:
       output: ". += { application: .application }"
     transition: CreateTaskgroup
@@ -74,6 +71,8 @@ states:
     actionMode: sequential
     actions:
       - name: createTaskgroup
+        actionDataFilter:
+          toStateData: ".taskgroup"
         functionRef:
           refName: createTaskgroup
           arguments:
@@ -101,7 +100,8 @@ states:
               sources: [ ]
               targets:
                 - cloud-readiness
-            
+    stateDataFilter:
+      output: ". += { taskgroup: .taskgroup }"
     transition: SubmitAnalysis
   - name: SubmitAnalysis
     type: operation
@@ -151,9 +151,16 @@ states:
     dataConditions:
       - condition: (.taskgroup.state == "Ready" and .taskgroup.tasks[0].state == "Succeeded")
         transition: report
+      - condition: (.taskgroup.state == "Ready" and .taskgroup.tasks[0].state == "Failed")
+        transition: failed
     defaultCondition:
       transition: poll
   - name: report
+    type: operation
+    stateDataFilter:
+      output: '{result: .taskgroup.tasks[0]| .mtaURL + "/hub/applications" + "/" + (.application.id|tostring) + "/bucket/" + .data.output}'
+    end: true
+  - name: failed
     type: operation
     stateDataFilter:
       output: '{result: .taskgroup.tasks[0]| .mtaURL + "/hub/applications" + "/" + (.application.id|tostring) + "/bucket/" + .data.output}'
