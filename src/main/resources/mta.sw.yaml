@@ -53,7 +53,10 @@ states:
   - name: CreateApplication
     type: operation
     actions:
-      - functionRef:
+      - name: createApplication
+        actionDataFilter:
+          toStateData: ".application"
+        functionRef:
           refName: createApplication
           arguments:
             name: ".repositoryURL"
@@ -73,32 +76,44 @@ states:
           arguments:
             name: taskgroup.windup
             addon: windup
+            tasks:
+              - name: parodos.windup
+                application:
+                  id: ".application.id"
             data:
               output: "/windup/report"
+              mode:
+                binary: false
+                diva: false
+                withDeps: false
               rules:
+                labels:
+                  - "konveyor.io/target=cloud-readiness"
+                rulesets:
+                  - id: 2
+                    name: Containerization
                 path: ''
               scope:
                 withKnown: false
               sources: [ ]
               targets:
                 - cloud-readiness
-            tasks:
-              - name: parodos.windup
-                application:
-                  id: ".application.id"
+            
     transition: SubmitAnalysis
   - name: SubmitAnalysis
     type: operation
     actionMode: sequential
     actions:
       - name: submitTaskgroup
-        actionDataFilter:
-          toStateData: ".taskgroup"
         functionRef:
           refName: submitTaskgroup
           arguments:
             id: ".taskgroup.id"
             data: ".taskgroup.data"
+            tasks: ".taskgroup.tasks"
+            addon: windup
+            createUser: admin.noauth
+
     transition: GetAnalysis
   - name: GetAnalysis
     type: operation
